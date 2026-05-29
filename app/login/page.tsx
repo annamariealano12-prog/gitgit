@@ -42,6 +42,7 @@ function LoginContent() {
 
   const [mounted, setMounted] = useState(false);
   const [view, setView] = useState<"landing" | "auth" | "forgot">("landing");
+  // Students only ever log in — no register tab
   const [isLogin, setIsLogin] = useState(true);
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
@@ -81,6 +82,8 @@ function LoginContent() {
     }
     logoutUser();
     setRole(r);
+    // Students always start on login; teachers can toggle to register
+    setIsLogin(true);
     setView("auth");
     resetForm();
   };
@@ -103,49 +106,36 @@ function LoginContent() {
       return;
     }
 
-    // Name shown for: teacher (always) and student registration
-    const nameIsShown = role === "teacher" || !isLogin;
-    if (nameIsShown) {
-      const nameError = validateName(name);
-      if (nameError) { setError(nameError); return; }
-    }
-
     if (!password) { setError("Password is required."); return; }
     if (password.length > 8) {
       setError("Password must not exceed 8 characters.");
       return;
     }
 
-    if (role === "student" && !studentId.trim()) {
-      setError("Student ID is required.");
-      return;
-    }
+    if (role === "teacher") {
+      // Teacher: identifier is their full name
+      const nameError = validateName(name);
+      if (nameError) { setError(nameError); return; }
 
-    // Identifier: teacher → name, student → student ID
-    const identifier = role === "teacher" ? name.trim() : studentId.trim();
+      const identifier = name.trim();
 
-    if (isLogin) {
-      const err = loginUser(identifier, password);
-      if (err) { setError(err); }
-      else {
-        router.push(
-          role === "teacher" ? "/dashboard/teacher" : "/dashboard/student"
-        );
+      if (isLogin) {
+        const err = loginUser(identifier, password);
+        if (err) { setError(err); }
+        else { router.push("/dashboard/teacher"); }
+      } else {
+        // Teacher registration
+        const err = registerUser({ name: name.trim(), userId: identifier, password, role: "teacher" });
+        if (err) { setError(err); }
+        else { router.push("/dashboard/teacher"); }
       }
     } else {
-      if (!name.trim()) { setError("Please fill in all fields."); return; }
-      const err = registerUser({
-        name: name.trim(),
-        userId: identifier,
-        password,
-        role,
-      });
+      // Student: identifier is student ID — login only
+      if (!studentId.trim()) { setError("Student ID is required."); return; }
+
+      const err = loginUser(studentId.trim(), password);
       if (err) { setError(err); }
-      else {
-        router.push(
-          role === "teacher" ? "/dashboard/teacher" : "/dashboard/student"
-        );
-      }
+      else { router.push("/dashboard/student"); }
     }
   };
 
@@ -234,7 +224,7 @@ function LoginContent() {
           </div>
         )}
 
-        {/* ── AUTH (Login / Register) ── */}
+        {/* ── AUTH ── */}
         {view === "auth" && (
           <div className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-[40px] shadow-2xl border border-zinc-100 dark:border-zinc-800 p-10 animate-in fade-in slide-in-from-bottom-6 duration-500">
             <button
@@ -250,39 +240,43 @@ function LoginContent() {
                 <span className="text-green-600">Portal</span>
               </h2>
               <p className="text-xs font-bold text-zinc-400 mt-1 uppercase tracking-widest">
-                {isLogin ? "Welcome back!" : "Create your account"}
+                {role === "student"
+                  ? "Use the credentials provided by your teacher"
+                  : isLogin ? "Welcome back!" : "Create your account"}
               </p>
             </div>
 
-            {/* Tab Toggle */}
-            <div className="flex bg-zinc-100 dark:bg-zinc-800 p-1.5 rounded-2xl mb-8">
-              <button
-                onClick={() => { setIsLogin(true); resetForm(); }}
-                className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                  isLogin
-                    ? "bg-white dark:bg-zinc-700 text-green-600 dark:text-white shadow-sm"
-                    : "text-zinc-400"
-                }`}
-              >
-                Login
-              </button>
-              <button
-                onClick={() => { setIsLogin(false); resetForm(); }}
-                className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                  !isLogin
-                    ? "bg-white dark:bg-zinc-700 text-green-600 dark:text-white shadow-sm"
-                    : "text-zinc-400"
-                }`}
-              >
-                Register
-              </button>
-            </div>
+            {/* Tab Toggle — teachers only */}
+            {role === "teacher" && (
+              <div className="flex bg-zinc-100 dark:bg-zinc-800 p-1.5 rounded-2xl mb-8">
+                <button
+                  onClick={() => { setIsLogin(true); resetForm(); }}
+                  className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                    isLogin
+                      ? "bg-white dark:bg-zinc-700 text-green-600 dark:text-white shadow-sm"
+                      : "text-zinc-400"
+                  }`}
+                >
+                  Login
+                </button>
+                <button
+                  onClick={() => { setIsLogin(false); resetForm(); }}
+                  className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                    !isLogin
+                      ? "bg-white dark:bg-zinc-700 text-green-600 dark:text-white shadow-sm"
+                      : "text-zinc-400"
+                  }`}
+                >
+                  Register
+                </button>
+              </div>
+            )}
 
-            {/* Student registration hint */}
-            {role === "student" && !isLogin && (
+            {/* Student login info banner */}
+            {role === "student" && (
               <div className="mb-5 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/40 rounded-2xl">
                 <p className="text-[11px] font-bold text-blue-600 dark:text-blue-400 leading-relaxed">
-                  📋 Use the <strong>Student ID</strong> assigned by your teacher. It will automatically enroll you in the correct section.
+                  📋 Enter the <strong>Student ID</strong> and <strong>password</strong> given to you by your teacher to access your section.
                 </p>
               </div>
             )}
@@ -301,8 +295,8 @@ function LoginContent() {
 
             <form onSubmit={handleSubmit} className="flex flex-col gap-5" autoComplete="off">
 
-              {/* NAME — teacher always, student on register */}
-              {(role === "teacher" || !isLogin) && (
+              {/* NAME — teachers only (always shown for teachers) */}
+              {role === "teacher" && (
                 <div className="relative">
                   <User
                     className="absolute left-4 top-[1.1rem] text-zinc-300 dark:text-zinc-600"
@@ -311,7 +305,7 @@ function LoginContent() {
                   <input
                     key={`name-${role}-${isLogin}`}
                     type="text"
-                    placeholder="FULL NAME"
+                    placeholder="NAME OF COLLEGE"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     autoComplete="off"
@@ -329,7 +323,7 @@ function LoginContent() {
                     size={18}
                   />
                   <input
-                    key={`sid-${role}-${isLogin}`}
+                    key={`sid-${role}`}
                     type="text"
                     placeholder="STUDENT ID (e.g. 2021-00123)"
                     value={studentId}
@@ -367,7 +361,7 @@ function LoginContent() {
                 </button>
               </div>
 
-              {/* Forgot Password */}
+              {/* Forgot Password — login views only */}
               {isLogin && (
                 <div className="text-right -mt-2">
                   <button
@@ -390,7 +384,7 @@ function LoginContent() {
                 disabled={!_hydrated}
                 className="w-full bg-green-600 text-white font-black py-5 rounded-3xl mt-2 hover:bg-green-700 active:scale-[0.98] transition-all shadow-lg text-xs uppercase tracking-[0.2em] disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isLogin ? "Sign In" : "Create Account"}
+                {role === "student" ? "Sign In" : isLogin ? "Sign In" : "Create Account"}
               </button>
             </form>
           </div>
